@@ -418,10 +418,10 @@ function ResultsScreen({ session, cells }) {
     <main className="results-shell">
       <section className="results-card">
         <span className="eyebrow">TINKERBINGO RESULTS</span>
-        <h1>Well done, {result?.attendee_name || session.name}!</h1>
+        <h1>{result?.event_status === "ended" && !result?.attendee_completed_at ? "Game ended, " : "Well done, "}{result?.attendee_name || session.name}!</h1>
         <div className="time-card">
-          <span>Completion time</span>
-          <strong>{timeTaken}</strong>
+          <span>{result?.attendee_completed_at ? "Completion time" : "Your final progress"}</span>
+          <strong>{result?.attendee_completed_at ? timeTaken : `${result?.completed_count ?? 0}/${result?.total_cells ?? 0}`}</strong>
         </div>
         <div className="result-tabs">
           <button
@@ -484,6 +484,7 @@ function GridPage() {
   const [cells, setCells] = useState([]);
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState("");
+  const [gameEnded, setGameEnded] = useState(false);
   const refresh = async () => {
     try {
       const { data, error: rpcError } = await getClient().rpc(
@@ -502,12 +503,20 @@ function GridPage() {
       return;
     }
     refresh();
+    const checkStatus = async () => {
+      const { data } = await getClient().rpc("get_attendee_result", { p_attendee_id: session.attendeeId });
+      const result = Array.isArray(data) ? data[0] : data;
+      if (result?.event_status === "ended") setGameEnded(true);
+    };
+    checkStatus();
+    const timer = setInterval(checkStatus, 3000);
+    return () => clearInterval(timer);
   }, []);
   if (!session) return null;
   const completed = cells.filter(
     (cell) => cell.cell_status === "completed",
   ).length;
-  if (cells.length > 0 && completed === cells.length)
+  if (gameEnded || (cells.length > 0 && completed === cells.length))
     return <ResultsScreen session={session} cells={cells} />;
   return (
     <main className="grid-shell">
