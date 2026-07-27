@@ -69,4 +69,16 @@ app.post('/api/events/:eventId/start', async (req, res) => {
   res.status(204).end();
 });
 
+app.post('/api/uploads/:eventId/:cellId', async (req, res) => {
+  try {
+    const { eventId, cellId } = req.params;
+    const { data: cell, error: cellError } = await supabase.from('grid_cells').select('id').eq('id', cellId).eq('event_id', eventId).eq('status', 'pending').single();
+    if (cellError || !cell) return fail(res, cellError ?? new Error('Grid cell not found.'), 404);
+    const path = `${eventId}/${cellId}.jpg`;
+    const { data, error } = await supabase.storage.from('selfies').createSignedUploadUrl(path, { upsert: true });
+    if (error) return fail(res, error);
+    res.json({ path, token: data.token });
+  } catch (error) { return fail(res, error, 500); }
+});
+
 app.listen(PORT, () => console.log(`TinkerBingo host API listening on :${PORT}`));

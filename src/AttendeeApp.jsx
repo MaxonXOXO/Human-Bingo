@@ -62,8 +62,10 @@ function VerificationModal({ cell, session, onClose, onComplete }) {
     if (!photo) return;
     setBusy(true); setError('');
     try {
-      const path = `${session.eventId}/${cell.cell_id}.jpg`;
-      const { error: uploadError } = await getClient().storage.from('selfies').upload(path, photo, { contentType: 'image/jpeg', upsert: true }); if (uploadError) throw uploadError;
+      const ticketResponse = await fetch(`/api/uploads/${session.eventId}/${cell.cell_id}`, { method: 'POST' });
+      const ticket = await ticketResponse.json(); if (!ticketResponse.ok) throw new Error(ticket.error || 'Could not prepare selfie upload.');
+      const { error: uploadError } = await getClient().storage.from('selfies').uploadToSignedUrl(ticket.path, ticket.token, photo, { contentType: 'image/jpeg', upsert: true }); if (uploadError) throw uploadError;
+      const path = ticket.path;
       const { data, error: completeError } = await getClient().rpc('complete_grid_cell', { p_cell_id: cell.cell_id, p_selfie_url: path }); if (completeError) throw completeError; if (!data) throw new Error('This cell could not be completed.');
       await onComplete();
     } catch (err) { setError(err.message || 'Could not save selfie.'); } finally { setBusy(false); }
