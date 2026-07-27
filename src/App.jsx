@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import AttendeeApp from './AttendeeApp.jsx';
 
 const api = async (path, options = {}) => {
   const response = await fetch(`/api${path}`, {
@@ -39,8 +40,7 @@ function Dashboard({ initialEvent }) {
   const event = snapshot.event;
   const count = snapshot.attendees.length;
   const proposed = suggestedGrid(count);
-  const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
-  const joinUrl = `${appUrl}/join?event=${event.id}`;
+  const joinUrl = new URL(`/join?event=${event.id}`, window.location.origin).toString();
 
   useEffect(() => {
     let active = true;
@@ -67,6 +67,7 @@ function Dashboard({ initialEvent }) {
 }
 
 export default function App() {
+  if (location.pathname === '/join' || location.pathname === '/waiting') return <AttendeeApp />;
   const [event, setEvent] = useState(() => { try { return JSON.parse(localStorage.getItem('tinkerBingoHostEvent')); } catch { return null; } });
   const selectEvent = (next) => { localStorage.setItem('tinkerBingoHostEvent', JSON.stringify(next)); setEvent(next); };
   return event ? <Dashboard initialEvent={event} /> : <EventSetup onCreated={selectEvent} />;
