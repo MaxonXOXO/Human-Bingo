@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import AttendeeApp from "./AttendeeApp.jsx";
 import "./host.css";
+import LivePreview from "./LivePreview.jsx";
 
 const api = async (path, options = {}) => {
   const response = await fetch(`/api${path}`, {
@@ -97,6 +98,7 @@ function Dashboard({ initialEvent }) {
       localStorage.getItem("tinkerBingoAttendeeOrigin") ||
       window.location.origin,
   );
+  const [showPreview, setShowPreview] = useState(false);
   const event = snapshot.event;
   const count = snapshot.attendees.length;
   const proposed = suggestedGrid(count);
@@ -184,6 +186,7 @@ function Dashboard({ initialEvent }) {
   }
   const missing =
     expected === "" ? null : Math.max(0, Number(expected) - count);
+  if (showPreview) return <LivePreview attendees={snapshot.attendees} onClose={() => setShowPreview(false)} />;
   return (
     <main className="dashboard">
       <header>
@@ -201,6 +204,7 @@ function Dashboard({ initialEvent }) {
         >
           New event
         </button>
+        {event.status === "live" && <button onClick={() => setShowPreview(true)}>Live preview</button>}
       </header>
       <div className="dashboard-grid">
         <section className="card qr-card">
