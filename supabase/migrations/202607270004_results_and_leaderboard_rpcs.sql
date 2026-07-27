@@ -17,7 +17,7 @@ language sql security definer set search_path = public stable as $$
     where a.event_id = p_event_id
     group by a.id
   )
-  select rank() over (order by (status = 'completed') desc, completed_at asc nulls last, completed_count desc, name),
+  select rank() over (order by (status = 'completed') desc, completed_at asc nulls last, completed_count desc, name) as placement,
     id, name, status, completed_count, total_cells, completed_at
   from stats
   order by placement, name;
