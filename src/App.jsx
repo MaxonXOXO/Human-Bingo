@@ -186,7 +186,7 @@ function Dashboard({ initialEvent }) {
   }
   const missing =
     expected === "" ? null : Math.max(0, Number(expected) - count);
-  if (showPreview) return <LivePreview attendees={snapshot.attendees} onClose={() => setShowPreview(false)} />;
+  if (showPreview) return <LivePreview attendees={snapshot.attendees} leaderboard={snapshot.leaderboard} onClose={() => setShowPreview(false)} />;
   return (
     <main className="dashboard">
       <header>
@@ -204,7 +204,7 @@ function Dashboard({ initialEvent }) {
         >
           New event
         </button>
-        {event.status === "live" && <button onClick={() => setShowPreview(true)}>Live preview</button>}
+        <button onClick={() => setShowPreview(true)}>Live preview</button>
       </header>
       <div className="dashboard-grid">
         <section className="card qr-card">
