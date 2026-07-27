@@ -25,6 +25,31 @@ app.post('/api/events', async (req, res) => {
   res.status(201).json({ event: data });
 });
 
+// Deliberately local-only: creates enough predictable players to exercise a
+// real grid without asking classmates to register during development.
+app.post('/api/dev/events/:eventId/seed', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).end();
+  const players = [
+    ['Aarav Mehta', 'CSE', 'Semester 4', 'D2A3'], ['Diya Shah', 'ECE', 'Semester 4', 'D3B4'],
+    ['Kabir Singh', 'ME', 'Semester 6', 'D4C5'], ['Anaya Patel', 'CSE', 'Semester 2', 'D5E6'],
+    ['Vivaan Rao', 'EEE', 'Semester 4', 'D6F7'], ['Isha Nair', 'IT', 'Semester 6', 'D7G8'],
+    ['Arjun Das', 'CIVIL', 'Semester 2', 'D8H9'], ['Meera Jain', 'ECE', 'Semester 6', 'D9J2'],
+    ['Rohan Gupta', 'CSE', 'Semester 4', 'D2K3'], ['Saanvi Roy', 'IT', 'Semester 2', 'D3L4'],
+  ];
+  try {
+    const eventId = req.params.eventId;
+    const { data: event, error: eventError } = await supabase.from('events').select('status').eq('id', eventId).single();
+    if (eventError) return fail(res, eventError);
+    if (event.status !== 'registering') return res.status(400).json({ error: 'Seed players can only be added before the game starts.' });
+    const rows = players.map(([name, branch, semester, secret_code], index) => ({ event_id: eventId, name, branch, semester, secret_code, email: `demo-player-${index + 1}@tinkerbingo.test` }));
+    const { error } = await supabase.from('attendees').upsert(rows, { onConflict: 'event_id,email', ignoreDuplicates: true });
+    if (error) return fail(res, error);
+    const { data, error: listError } = await supabase.from('attendees').select('name,branch,semester,secret_code').eq('event_id', eventId).like('email', '%@tinkerbingo.test').order('name');
+    if (listError) return fail(res, listError);
+    res.json({ players: data });
+  } catch (error) { return fail(res, error, 500); }
+});
+
 app.get('/api/events/:eventId', async (req, res) => {
   const { eventId } = req.params;
   const [{ data: event, error: eventError }, { data: attendees, error: attendeeError }] = await Promise.all([

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import './attendee.css';
 
 const sessionKey = 'tinkerBingoAttendee';
 const getClient = () => {
@@ -36,7 +37,7 @@ function WaitingRoom() {
   useEffect(() => {
     if (!session?.eventId) { location.replace('/join'); return undefined; }
     let active = true;
-    const refresh = async () => { try { const { data, error: rpcError } = await getClient().rpc('get_event_lobby', { p_event_id: session.eventId }); if (rpcError) throw rpcError; if (active) setLobby(Array.isArray(data) ? data[0] : data); } catch (err) { if (active) setError(err.message); } };
+    const refresh = async () => { try { const { data, error: rpcError } = await getClient().rpc('get_event_lobby', { p_event_id: session.eventId }); if (rpcError) throw rpcError; const next = Array.isArray(data) ? data[0] : data; if (active) { setLobby(next); if (next?.event_status === 'live') location.replace('/grid'); } } catch (err) { if (active) setError(err.message); } };
     refresh(); const timer = setInterval(refresh, 3000); return () => { active = false; clearInterval(timer); };
   }, [session?.eventId]);
   if (!session) return null;
@@ -44,4 +45,34 @@ function WaitingRoom() {
   return <main className="attendee-shell"><section className="attendee-card waiting-card"><span className="eyebrow">TINKERBINGO</span><h1>{live ? 'The hunt has started!' : 'You’re checked in'}</h1><p>{live ? 'Your grid is being prepared. Keep this page open.' : 'Waiting for the host to start the game.'}</p><div className="lobby-count"><strong>{lobby?.registered_count ?? '—'}</strong><span>people registered</span></div>{error && <p className="error">{error}</p>}<p className="muted">{lobby?.event_name || 'Loading event…'}</p></section></main>;
 }
 
-export default function AttendeeApp() { return location.pathname === '/waiting' ? <WaitingRoom /> : <JoinPage />; }
+function VerificationModal({ cell, session, onClose, onComplete }) {
+  const [code, setCode] = useState(''); const [verified, setVerified] = useState(false); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const videoRef = useRef(null); const streamRef = useRef(null);
+  useEffect(() => () => streamRef.current?.getTracks().forEach(track => track.stop()), []);
+  async function verify(e) { e.preventDefault(); setBusy(true); setError(''); try { const { data, error: rpcError } = await getClient().rpc('verify_grid_cell', { p_cell_id: cell.cell_id, p_entered_code: code }); if (rpcError) throw rpcError; if (!data) throw new Error('That code does not match. Ask the person for their code again.'); setVerified(true); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function enableCamera() { try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }); streamRef.current = stream; videoRef.current.srcObject = stream; } catch { setError('Camera permission was denied. Allow camera access and try again.'); } }
+  async function capture() {
+    const video = videoRef.current; if (!video?.videoWidth) return setError('The camera is still starting. Try again in a moment.');
+    setBusy(true); setError('');
+    try {
+      const canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight; canvas.getContext('2d').drawImage(video, 0, 0);
+      const photo = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .88)); if (!photo) throw new Error('Could not capture photo.');
+      const path = `${session.eventId}/${cell.cell_id}.jpg`;
+      const { error: uploadError } = await getClient().storage.from('selfies').upload(path, photo, { contentType: 'image/jpeg', upsert: true }); if (uploadError) throw uploadError;
+      const { data, error: completeError } = await getClient().rpc('complete_grid_cell', { p_cell_id: cell.cell_id, p_selfie_url: path }); if (completeError) throw completeError; if (!data) throw new Error('This cell could not be completed.');
+      streamRef.current?.getTracks().forEach(track => track.stop()); await onComplete();
+    } catch (err) { setError(err.message || 'Could not save selfie.'); } finally { setBusy(false); }
+  }
+  return <div className="modal-backdrop"><section className="verify-modal"><button className="close" onClick={onClose}>×</button><span className="eyebrow">VERIFY PLAYER</span><h2>{cell.target_initials}</h2><p>{cell.target_branch} · {cell.target_semester}</p>{!verified ? <form onSubmit={verify}><label>Ask them for their code<input autoFocus value={code} maxLength="6" onChange={e => setCode(e.target.value.toUpperCase())} placeholder="ABCD" /></label><button disabled={busy}>{busy ? 'Checking…' : 'Verify code'}</button></form> : <div className="camera-step"><p className="verified">Code confirmed. Take a live selfie together.</p><button onClick={enableCamera}>Open front camera</button><video ref={videoRef} autoPlay playsInline muted /><button onClick={capture} disabled={busy}>{busy ? 'Saving…' : 'Capture & complete'}</button></div>}{error && <p className="error">{error}</p>}</section></div>;
+}
+
+function GridPage() {
+  const [session] = useState(loadSession); const [cells, setCells] = useState([]); const [selected, setSelected] = useState(null); const [error, setError] = useState('');
+  const refresh = async () => { try { const { data, error: rpcError } = await getClient().rpc('get_attendee_grid', { p_owner_id: session.attendeeId }); if (rpcError) throw rpcError; setCells(data || []); } catch (err) { setError(err.message); } };
+  useEffect(() => { if (!session?.attendeeId) { location.replace('/join'); return; } refresh(); }, []);
+  if (!session) return null;
+  const completed = cells.filter(cell => cell.cell_status === 'completed').length;
+  return <main className="grid-shell"><header className="grid-header"><span className="eyebrow">TINKERBINGO</span><h1>Find your people</h1><p>{completed}/{cells.length || '—'} completed</p><div className="progress"><span style={{ width: `${cells.length ? completed / cells.length * 100 : 0}%` }} /></div></header>{error && <p className="error">{error}</p>}{cells.length ? <section className="bingo-grid">{cells.map(cell => <button key={cell.cell_id} className={`grid-cell ${cell.cell_status}`} onClick={() => cell.cell_status !== 'completed' && setSelected(cell)}><strong>{cell.target_initials}</strong><span>{cell.target_branch}</span>{cell.cell_status === 'completed' && <i>✓</i>}</button>)}</section> : <p className="muted grid-loading">Loading your grid…</p>}{selected && <VerificationModal cell={selected} session={session} onClose={() => setSelected(null)} onComplete={async () => { await refresh(); setSelected(null); }} />}</main>;
+}
+
+export default function AttendeeApp() { if (location.pathname === '/waiting') return <WaitingRoom />; if (location.pathname === '/grid') return <GridPage />; return <JoinPage />; }
