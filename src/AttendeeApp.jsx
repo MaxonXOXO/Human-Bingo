@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import './attendee.css';
+import './camera.css';
 
 const sessionKey = 'tinkerBingoAttendee';
 const getClient = () => {
@@ -47,23 +48,27 @@ function WaitingRoom() {
 
 function VerificationModal({ cell, session, onClose, onComplete }) {
   const [code, setCode] = useState(''); const [verified, setVerified] = useState(false); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
-  const videoRef = useRef(null); const streamRef = useRef(null);
-  useEffect(() => () => streamRef.current?.getTracks().forEach(track => track.stop()), []);
+  const [photo, setPhoto] = useState(null); const [previewUrl, setPreviewUrl] = useState(''); const fileInputRef = useRef(null);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
   async function verify(e) { e.preventDefault(); setBusy(true); setError(''); try { const { data, error: rpcError } = await getClient().rpc('verify_grid_cell', { p_cell_id: cell.cell_id, p_entered_code: code }); if (rpcError) throw rpcError; if (!data) throw new Error('That code does not match. Ask the person for their code again.'); setVerified(true); } catch (err) { setError(err.message); } finally { setBusy(false); } }
-  async function enableCamera() { try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }); streamRef.current = stream; videoRef.current.srcObject = stream; } catch { setError('Camera permission was denied. Allow camera access and try again.'); } }
-  async function capture() {
-    const video = videoRef.current; if (!video?.videoWidth) return setError('The camera is still starting. Try again in a moment.');
+  function choosePhoto(event) {
+    const nextPhoto = event.target.files?.[0]; if (!nextPhoto) return;
+    if (!nextPhoto.type.startsWith('image/')) return setError('Please take a photo.');
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPhoto(nextPhoto); setPreviewUrl(URL.createObjectURL(nextPhoto)); setError('');
+  }
+  function retake() { if (previewUrl) URL.revokeObjectURL(previewUrl); setPhoto(null); setPreviewUrl(''); if (fileInputRef.current) fileInputRef.current.value = ''; }
+  async function savePhoto() {
+    if (!photo) return;
     setBusy(true); setError('');
     try {
-      const canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight; canvas.getContext('2d').drawImage(video, 0, 0);
-      const photo = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .88)); if (!photo) throw new Error('Could not capture photo.');
       const path = `${session.eventId}/${cell.cell_id}.jpg`;
       const { error: uploadError } = await getClient().storage.from('selfies').upload(path, photo, { contentType: 'image/jpeg', upsert: true }); if (uploadError) throw uploadError;
       const { data, error: completeError } = await getClient().rpc('complete_grid_cell', { p_cell_id: cell.cell_id, p_selfie_url: path }); if (completeError) throw completeError; if (!data) throw new Error('This cell could not be completed.');
-      streamRef.current?.getTracks().forEach(track => track.stop()); await onComplete();
+      await onComplete();
     } catch (err) { setError(err.message || 'Could not save selfie.'); } finally { setBusy(false); }
   }
-  return <div className="modal-backdrop"><section className="verify-modal"><button className="close" onClick={onClose}>×</button><span className="eyebrow">VERIFY PLAYER</span><h2>{cell.target_initials}</h2><p>{cell.target_branch} · {cell.target_semester}</p>{!verified ? <form onSubmit={verify}><label>Ask them for their code<input autoFocus value={code} maxLength="6" onChange={e => setCode(e.target.value.toUpperCase())} placeholder="ABCD" /></label><button disabled={busy}>{busy ? 'Checking…' : 'Verify code'}</button></form> : <div className="camera-step"><p className="verified">Code confirmed. Take a live selfie together.</p><button onClick={enableCamera}>Open front camera</button><video ref={videoRef} autoPlay playsInline muted /><button onClick={capture} disabled={busy}>{busy ? 'Saving…' : 'Capture & complete'}</button></div>}{error && <p className="error">{error}</p>}</section></div>;
+  return <div className="modal-backdrop"><section className="verify-modal"><button className="close" onClick={onClose}>×</button><span className="eyebrow">VERIFY PLAYER</span><h2>{cell.target_initials}</h2><p>{cell.target_branch} · {cell.target_semester}</p>{!verified ? <form onSubmit={verify}><label>Ask them for their code<input autoFocus value={code} maxLength="6" onChange={e => setCode(e.target.value.toUpperCase())} placeholder="ABCD" /></label><button disabled={busy}>{busy ? 'Checking…' : 'Verify code'}</button></form> : <div className="camera-step"><p className="verified">Code confirmed. Take a selfie together.</p>{!previewUrl ? <label className="camera-button">Open phone camera<input ref={fileInputRef} type="file" accept="image/*" capture="user" onChange={choosePhoto} /></label> : <><img className="selfie-preview" src={previewUrl} alt="Selfie preview" /><div className="photo-actions"><button className="quiet" onClick={retake} disabled={busy}>Retake</button><button onClick={savePhoto} disabled={busy}>{busy ? 'Saving…' : 'Done'}</button></div></>}</div>}{error && <p className="error">{error}</p>}</section></div>;
 }
 
 function GridPage() {
