@@ -4,6 +4,7 @@ import "./attendee.css";
 import "./camera.css";
 import "./results.css";
 import "./grid.css";
+import CreditFooter from "./CreditFooter.jsx";
 
 const sessionKey = "tinkerBingoAttendee";
 const getClient = () => {
@@ -100,6 +101,7 @@ function JoinPage() {
             Continue to waiting room
           </button>
         </section>
+        <CreditFooter />
       </main>
     );
   return (
@@ -150,6 +152,7 @@ function JoinPage() {
           <button disabled={busy}>{busy ? "Checking in…" : "Check in"}</button>
         </form>
       </section>
+      <CreditFooter />
     </main>
   );
 }

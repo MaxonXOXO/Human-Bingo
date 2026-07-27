@@ -3,6 +3,7 @@ import { QRCodeSVG } from "qrcode.react";
 import AttendeeApp from "./AttendeeApp.jsx";
 import "./host.css";
 import LivePreview from "./LivePreview.jsx";
+import CreditFooter from "./CreditFooter.jsx";
 
 const api = async (path, options = {}) => {
   const response = await fetch(`/api${path}`, {
@@ -374,6 +375,7 @@ function Dashboard({ initialEvent }) {
           )}
         </section>
       </div>
+      <CreditFooter />
     </main>
   );
 }
