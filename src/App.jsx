@@ -76,7 +76,8 @@ function Dashboard({ initialEvent }) {
 }
 
 export default function App() {
-  if (location.pathname === '/join' || location.pathname === '/waiting') return <AttendeeApp />;
+  const path = location.pathname.replace(/\/+$/, '') || '/';
+  if (['/join', '/waiting', '/grid'].includes(path)) return <AttendeeApp />;
   const [event, setEvent] = useState(() => { try { return JSON.parse(localStorage.getItem('tinkerBingoHostEvent')); } catch { return null; } });
   const selectEvent = (next) => { localStorage.setItem('tinkerBingoHostEvent', JSON.stringify(next)); setEvent(next); };
   return event ? <Dashboard initialEvent={event} /> : <EventSetup onCreated={selectEvent} />;

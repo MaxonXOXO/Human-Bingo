@@ -75,4 +75,9 @@ function GridPage() {
   return <main className="grid-shell"><header className="grid-header"><span className="eyebrow">TINKERBINGO</span><h1>Find your people</h1><p>{completed}/{cells.length || '—'} completed</p><div className="progress"><span style={{ width: `${cells.length ? completed / cells.length * 100 : 0}%` }} /></div></header>{error && <p className="error">{error}</p>}{cells.length ? <section className="bingo-grid">{cells.map(cell => <button key={cell.cell_id} className={`grid-cell ${cell.cell_status}`} onClick={() => cell.cell_status !== 'completed' && setSelected(cell)}><strong>{cell.target_initials}</strong><span>{cell.target_branch}</span>{cell.cell_status === 'completed' && <i>✓</i>}</button>)}</section> : <p className="muted grid-loading">Loading your grid…</p>}{selected && <VerificationModal cell={selected} session={session} onClose={() => setSelected(null)} onComplete={async () => { await refresh(); setSelected(null); }} />}</main>;
 }
 
-export default function AttendeeApp() { if (location.pathname === '/waiting') return <WaitingRoom />; if (location.pathname === '/grid') return <GridPage />; return <JoinPage />; }
+export default function AttendeeApp() {
+  const path = location.pathname.replace(/\/+$/, '') || '/';
+  if (path === '/waiting') return <WaitingRoom />;
+  if (path === '/grid') return <GridPage />;
+  return <JoinPage />;
+}
