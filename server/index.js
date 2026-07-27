@@ -52,13 +52,21 @@ app.post('/api/dev/events/:eventId/seed', async (req, res) => {
 
 app.get('/api/events/:eventId', async (req, res) => {
   const { eventId } = req.params;
-  const [{ data: event, error: eventError }, { data: attendees, error: attendeeError }] = await Promise.all([
+  const [{ data: event, error: eventError }, { data: attendees, error: attendeeError }, { data: leaderboard, error: leaderboardError }] = await Promise.all([
     supabase.from('events').select('*').eq('id', eventId).single(),
     supabase.from('attendees').select('id,name,branch,semester,email,status,created_at,completed_at').eq('event_id', eventId).order('created_at'),
+    supabase.rpc('get_event_leaderboard', { p_event_id: eventId }),
   ]);
   if (eventError) return fail(res, eventError, eventError.code === 'PGRST116' ? 404 : 400);
   if (attendeeError) return fail(res, attendeeError);
-  res.json({ event, attendees });
+  if (leaderboardError) return fail(res, leaderboardError);
+  res.json({ event, attendees, leaderboard });
+});
+
+app.post('/api/events/:eventId/end', async (req, res) => {
+  const { error } = await supabase.from('events').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', req.params.eventId).eq('status', 'live');
+  if (error) return fail(res, error);
+  res.status(204).end();
 });
 
 app.post('/api/events/:eventId/start', async (req, res) => {

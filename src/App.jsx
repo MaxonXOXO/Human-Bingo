@@ -32,7 +32,7 @@ function EventSetup({ onCreated }) {
 }
 
 function Dashboard({ initialEvent }) {
-  const [snapshot, setSnapshot] = useState({ event: initialEvent, attendees: [] });
+  const [snapshot, setSnapshot] = useState({ event: initialEvent, attendees: [], leaderboard: [] });
   const [expected, setExpected] = useState('');
   const [gridSize, setGridSize] = useState(null);
   const [notice, setNotice] = useState('');
@@ -64,6 +64,12 @@ function Dashboard({ initialEvent }) {
   async function seedPlayers() {
     setBusy(true); setNotice('');
     try { const result = await api(`/dev/events/${event.id}/seed`, { method: 'POST', body: JSON.stringify({ password: demoPassword }) }); setTestPlayers(result.players); setNotice('Demo players added. Their codes are shown below.'); const data = await api(`/events/${event.id}`); setSnapshot(data); }
+    catch (err) { setNotice(err.message); } finally { setBusy(false); }
+  }
+  async function endGame() {
+    if (!window.confirm('End this game for everyone?')) return;
+    setBusy(true); setNotice('');
+    try { await api(`/events/${event.id}/end`, { method: 'POST' }); setNotice('Game ended. Final standings are now visible.'); setSnapshot(await api(`/events/${event.id}`)); }
     catch (err) { setNotice(err.message); } finally { setBusy(false); }
   }
   const missing = expected === '' ? null : Math.max(0, Number(expected) - count);

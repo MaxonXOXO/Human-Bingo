@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import './attendee.css';
 import './camera.css';
+import './results.css';
 
 const sessionKey = 'tinkerBingoAttendee';
 const getClient = () => {
@@ -73,12 +74,26 @@ function VerificationModal({ cell, session, onClose, onComplete }) {
   return <div className="modal-backdrop"><section className="verify-modal"><button className="close" onClick={onClose}>×</button><span className="eyebrow">VERIFY PLAYER</span><h2>{cell.target_initials}</h2><p>{cell.target_branch} · {cell.target_semester}</p>{!verified ? <form onSubmit={verify}><label>Ask them for their code<input autoFocus value={code} maxLength="6" onChange={e => setCode(e.target.value.toUpperCase())} placeholder="ABCD" /></label><button disabled={busy}>{busy ? 'Checking…' : 'Verify code'}</button></form> : <div className="camera-step"><p className="verified">Code confirmed. Take a selfie together.</p>{!previewUrl ? <label className="camera-button">Open phone camera<input ref={fileInputRef} type="file" accept="image/*" capture="user" onChange={choosePhoto} /></label> : <><img className="selfie-preview" src={previewUrl} alt="Selfie preview" /><div className="photo-actions"><button className="quiet" onClick={retake} disabled={busy}>Retake</button><button onClick={savePhoto} disabled={busy}>{busy ? 'Saving…' : 'Done'}</button></div></>}</div>}{error && <p className="error">{error}</p>}</section></div>;
 }
 
+function ResultsScreen({ session, cells }) {
+  const [result, setResult] = useState(null); const [leaders, setLeaders] = useState([]); const [tab, setTab] = useState('results');
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => { const client = getClient(); const [{ data: resultData }, { data: leaderData }] = await Promise.all([client.rpc('get_attendee_result', { p_attendee_id: session.attendeeId }), client.rpc('get_event_leaderboard', { p_event_id: session.eventId })]); if (active) { setResult(Array.isArray(resultData) ? resultData[0] : resultData); setLeaders(leaderData || []); } };
+    refresh(); const timer = setInterval(refresh, 3000); return () => { active = false; clearInterval(timer); };
+  }, [session.attendeeId, session.eventId]);
+  const seconds = result?.started_at && result?.attendee_completed_at ? Math.max(0, Math.round((new Date(result.attendee_completed_at) - new Date(result.started_at)) / 1000)) : null;
+  const timeTaken = seconds === null ? '—' : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  const photos = cells.filter(cell => cell.selfie_url).map(cell => ({ ...cell, url: getClient().storage.from('selfies').getPublicUrl(cell.selfie_url).data.publicUrl }));
+  return <main className="results-shell"><section className="results-card"><span className="eyebrow">TINKERBINGO RESULTS</span><h1>Well done, {result?.attendee_name || session.name}!</h1><div className="time-card"><span>Completion time</span><strong>{timeTaken}</strong></div><div className="result-tabs"><button className={tab === 'results' ? '' : 'quiet'} onClick={() => setTab('results')}>Leaderboard</button><button className={tab === 'gallery' ? '' : 'quiet'} onClick={() => setTab('gallery')}>My gallery</button></div>{tab === 'results' ? <div className="result-leaders">{leaders.map(row => <div key={row.attendee_id} className="leader-row"><b>{row.placement <= 3 ? ['🥇','🥈','🥉'][row.placement - 1] : `#${row.placement}`}</b><span>{row.attendee_name}</span><small>{row.completed_count}/{row.total_cells}</small></div>)}</div> : <div className="photo-gallery">{photos.map(photo => <figure key={photo.cell_id}><img src={photo.url} alt={`Selfie with ${photo.target_initials}`} /><figcaption>{photo.target_initials}<a href={photo.url} download={`tinkerbingo-${photo.target_initials}.jpg`}>Download</a></figcaption></figure>)}</div>}</section></main>;
+}
+
 function GridPage() {
   const [session] = useState(loadSession); const [cells, setCells] = useState([]); const [selected, setSelected] = useState(null); const [error, setError] = useState('');
   const refresh = async () => { try { const { data, error: rpcError } = await getClient().rpc('get_attendee_grid', { p_owner_id: session.attendeeId }); if (rpcError) throw rpcError; setCells(data || []); } catch (err) { setError(err.message); } };
   useEffect(() => { if (!session?.attendeeId) { location.replace('/join'); return; } refresh(); }, []);
   if (!session) return null;
   const completed = cells.filter(cell => cell.cell_status === 'completed').length;
+  if (cells.length > 0 && completed === cells.length) return <ResultsScreen session={session} cells={cells} />;
   return <main className="grid-shell"><header className="grid-header"><span className="eyebrow">TINKERBINGO</span><h1>Find your people</h1><p>{completed}/{cells.length || '—'} completed</p><div className="progress"><span style={{ width: `${cells.length ? completed / cells.length * 100 : 0}%` }} /></div></header>{error && <p className="error">{error}</p>}{cells.length ? <section className="bingo-grid">{cells.map(cell => <button key={cell.cell_id} className={`grid-cell ${cell.cell_status}`} onClick={() => cell.cell_status !== 'completed' && setSelected(cell)}><strong>{cell.target_initials}</strong><span>{cell.target_branch}</span>{cell.cell_status === 'completed' && <i>✓</i>}</button>)}</section> : <p className="muted grid-loading">Loading your grid…</p>}{selected && <VerificationModal cell={selected} session={session} onClose={() => setSelected(null)} onComplete={async () => { await refresh(); setSelected(null); }} />}</main>;
 }
 
